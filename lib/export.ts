@@ -1,5 +1,6 @@
 import { COLORS, DAYS, TIMES } from './timetable';
 import type { Schedule } from './timetable';
+import { embedBackup } from './png-backup';
 export function wrapText(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -134,7 +135,11 @@ export async function downloadSchedule(state: Schedule, title: string) {
       'image/png',
     ),
   );
-  const url = URL.createObjectURL(blob);
+  const bytes = embedBackup(new Uint8Array(await blob.arrayBuffer()), {
+    title,
+    schedule: state,
+  });
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
   const a = document.createElement('a');
   a.href = url;
   a.download =

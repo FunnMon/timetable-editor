@@ -552,8 +552,11 @@ form input {
 }
 @media (max-width: 680px) {
   .topbar {
-    height: 76px;
-    padding: 0 14px;
+    min-height: 76px;
+    height: auto;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 14px;
   }
   .brand p {
     display: none;

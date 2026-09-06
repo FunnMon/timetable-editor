@@ -39,3 +39,5 @@ next-env.d.ts
 
 /dist-pages/
 *.tsbuildinfo
+/public/ocr/runtime/
+/*.traineddata

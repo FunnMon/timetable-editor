@@ -6,6 +6,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import {
   CalendarDays,
   Download,
+  Upload,
   Plus,
   GripVertical,
   MapPin,
@@ -16,6 +17,12 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
+  EmptyDescription,
+} from '@/components/ui/empty';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Select,
@@ -28,7 +35,6 @@ import {
   COLORS,
   DAYS,
   TIMES,
-  sample,
   place,
   updateCourse,
   placementError,
@@ -36,17 +42,24 @@ import {
 } from '@/lib/timetable';
 import type { Course, Schedule } from '@/lib/timetable';
 import { downloadSchedule } from '@/lib/export';
+import { importSchedulePng } from '@/lib/png-backup';
 const blank = () => ({ id: '', name: '', location: '', color: 0, duration: 1 });
 export default function Home() {
-  const [state, setState] = useState<Schedule>(sample);
-  const [history, setHistory] = useState<Schedule[]>([]);
+  const [state, setState] = useState<Schedule>({ courses: [], placements: [] });
+  const [history, setHistory] = useState<
+    { schedule: Schedule; title: string }[]
+  >([]);
   const [draft, setDraft] = useState<Course>(blank);
   const [selected, setSelected] = useState<string | null>(null);
   const [day, setDay] = useState('0');
   const [start, setStart] = useState('1');
   const [message, setMessage] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState('2026—2027学年第一学期课程表');
+  const titleRef = useRef(title);
+  titleRef.current = title;
   const [dragId, setDragId] = useState<string | undefined>(undefined);
   const [target, setTarget] = useState<{ day: number; start: number } | null>(
     null,
@@ -74,7 +87,11 @@ export default function Home() {
   );
   function commit(next: Schedule) {
     const previous = stateRef.current;
-    setHistory((h) => [...h.slice(-29), previous]);
+    const previousTitle = titleRef.current;
+    setHistory((h) => [
+      ...h.slice(-29),
+      { schedule: previous, title: previousTitle },
+    ]);
     stateRef.current = next;
     setState(next);
   }
@@ -87,6 +104,25 @@ export default function Home() {
       setStart(String(p.start));
     }
     setMessage('');
+  }
+  async function importImage(file: File) {
+    setImporting(true);
+    try {
+      const backup = await importSchedulePng(file, setMessage);
+      dragCleanup.current();
+      commit(backup.schedule);
+      setTitle(backup.title);
+      reset();
+      setMessage(
+        backup.legacy
+          ? `已从旧版图片识别${backup.schedule.placements.length}个安排，请核对课程文字。连续相同课程已合并；未出现在图上的课程无法恢复。可撤销导入，或导出新版PNG保存识别结果。`
+          : `已恢复${backup.schedule.courses.length}门课程和${backup.schedule.placements.length}个安排，可继续编辑；点击撤销可恢复导入前的课表。`,
+      );
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setImporting(false);
+    }
   }
   function reset() {
     setDraft(blank());
@@ -217,11 +253,13 @@ export default function Home() {
           <span className="week-label">一周，由你安排</span>
           <Button
             variant="outline"
-            disabled={!history.length}
+            disabled={!history.length || importing}
             onClick={() => {
               const prev = history.at(-1);
               if (prev) {
-                setState(prev);
+                stateRef.current = prev.schedule;
+                setState(prev.schedule);
+                setTitle(prev.title);
                 setHistory((h) => h.slice(0, -1));
                 reset();
               }
@@ -230,14 +268,34 @@ export default function Home() {
             <Undo2 />
             撤销
           </Button>
-          <Button onClick={exportImage} disabled={exporting}>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".png,image/png"
+            hidden
+            aria-label="选择课表PNG原图"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (file) void importImage(file);
+            }}
+          />
+          <Button
+            variant="outline"
+            disabled={importing || exporting}
+            onClick={() => fileRef.current?.click()}
+          >
+            <Upload />
+            {importing ? '正在导入…' : '导入PNG'}
+          </Button>
+          <Button onClick={exportImage} disabled={exporting || importing}>
             <Download />
             {exporting ? '正在导出…' : '导出图片'}
           </Button>
         </div>
       </header>
       <div className="workspace">
-        <aside className="editor-panel">
+        <aside className="editor-panel" inert={importing}>
           <div className="panel-heading">
             <h2>{draft.id ? '编辑课程' : '添加课程'}</h2>
             {draft.id && (
@@ -411,6 +469,16 @@ export default function Home() {
             <span>拖入右侧课表</span>
           </div>
           <div className="course-library">
+            {state.courses.length === 0 && (
+              <Empty className="border p-4">
+                <EmptyHeader>
+                  <EmptyTitle>还没有课程</EmptyTitle>
+                  <EmptyDescription>
+                    在上方创建第一门课程，或导入本站导出的PNG原图。
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            )}
             {state.courses.map((c) => (
               <button
                 key={c.id}
@@ -458,6 +526,7 @@ export default function Home() {
               <Input
                 className="title-input"
                 aria-label="课表标题"
+                disabled={importing}
                 maxLength={60}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -468,7 +537,7 @@ export default function Home() {
               {state.placements.length} 个安排
             </span>
           </div>
-          <div className="table-scroll" ref={scrollRef}>
+          <div className="table-scroll" ref={scrollRef} inert={importing}>
             <div
               className="schedule-grid"
               ref={gridRef}
@@ -569,7 +638,7 @@ export default function Home() {
             </div>
           </div>
           <p className="table-note">
-            已补齐第1–12节及周末。原图未显示的上午课程暂留空；周三高数按可见的第4节保留，起始节次可自行调整。
+            新版PNG可完整恢复设置；旧版2110×2250原图会自动识别可见课程，请核对文字。导入会替换当前课表，可撤销。请保留原始文件，不要缩放或截图。
           </p>
           <div className="status-line" role="status" aria-live="polite">
             {message || '课程模块可重复拖入、随时移动。关闭页面前请导出图片。'}
