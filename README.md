@@ -19,3 +19,9 @@ Node.js 22.13+，运行 `npm ci`、`npm run dev`。`npm run build` 生成部署�
 核心逻辑：`lib/timetable.ts`；图片导出：`lib/export.ts`；交互界面：`app/page.tsx`。
 
 WebMCP 为可选增强，浏览器不支持时不影响操作。注册协议及状态操作通过模拟上下文测试；未在真实支持 WebMCP 的浏览器中验证。
+
+## GitHub Pages
+
+运行 `npm run dev:pages` 可启动纯静态版本；运行 `npm run build:pages` 输出 `dist-pages/`。它复用相同的课程编辑器及图片导出逻辑，无需服务器或 API 密钥。
+
+GitHub 仓库启用 Pages（Source 选择 GitHub Actions）后，可手动运行 `Deploy timetable to GitHub Pages` 工作流发布。部署页面包含代码中预填的课程名称和地点；公开发布前请确认这些内容可以公开。GitHub Pages 与原 Sites 部署相互独立。
